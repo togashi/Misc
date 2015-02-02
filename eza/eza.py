@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-ARCHIVE_DIR_NAME = "archive"
+ARCHIVE_DIR_NAME = 'archive'
 ARCHIVE_DIR_SUFFIX = "%Y-%m-%d"
 ARCHIVE_DIR_DESKTOPINI = '''[.ShellClassInfo]
 IconResource={ICON_SPEC}
@@ -15,13 +15,20 @@ import os
 import datetime
 
 from ctypes import c_int, WINFUNCTYPE, windll
-from ctypes.wintypes import HWND, LPCWSTR, UINT
+from ctypes.wintypes import HWND, LPCWSTR, UINT, DWORD
 prototype = WINFUNCTYPE(c_int, HWND, LPCWSTR, LPCWSTR, UINT)
-MessageBox = prototype(("MessageBoxW", windll.user32), ((1, "hwnd", 0), (1, "text", None), (1, "caption", None), (1, "flags", 0)))
+MessageBox = prototype(('MessageBoxW', windll.user32), ((1, 'hwnd', 0), (1, 'text', None), (1, 'caption', None), (1, 'flags', 0)))
+prototype = WINFUNCTYPE(c_int, LPCWSTR, DWORD)
+SetFileAttributes = prototype(('SetFileAttributesW', windll.kernel32), ((1, 'path', None), (1, 'attrib', 0)))
+prototype = WINFUNCTYPE(c_int, LPCWSTR)
+GetFileAttributes = prototype(('GetFileAttributesW', windll.kernel32), ((1, 'path', None), ))
 
 MB_ICONERROR = 16
 MB_ICONINFORMATION = 64
 MB_OK = 0
+
+FILE_ATTRIBUTE_HIDDEN = 2
+FILE_ATTRIBUTE_SYSTEM = 4
 
 
 def get_archive_dir(path):
@@ -38,12 +45,14 @@ def make_sure_archive_basedir(path):
     if not os.path.exists(path):
         icon_spec = os.getenv('EZA_FOLDER_ICON', '')
         os.mkdir(path)
-        os.system("attrib +S \"%s\"" % path)
-        dti = path + os.path.sep + "desktop.ini"
-        f = open(dti, "w")
+        attr = GetFileAttributes(path)
+        SetFileAttributes(path, attr | FILE_ATTRIBUTE_SYSTEM)
+        dti = path + os.path.sep + 'desktop.ini'
+        f = open(dti, 'w')
         f.write(ARCHIVE_DIR_DESKTOPINI.format(**{'ICON_SPEC': icon_spec}))
         f.close()
-        os.system("attrib +S +H \"%s\"" % dti)
+        attr = GetFileAttributes(dti)
+        SetFileAttributes(dti, attr | (FILE_ATTRIBUTE_SYSTEM + FILE_ATTRIBUTE_HIDDEN))
     elif not os.path.isdir(path):
         return False
     return True
@@ -62,15 +71,14 @@ def make_sure_archive_dir(path):
 
 def main():
     for a in sys.argv[1:]:
-        a = unicode(a, "mbcs")
-        dir, new = get_archive_dir(a)
-        if not make_sure_archive_dir(dir):
-            MessageBox(0, u"ディレクトリ \"%s\" が作成できなかった" % dir, None, MB_ICONERROR)
+        a = unicode(a, 'mbcs')
+        dst_dir, dst_path = get_archive_dir(a)
+        if not make_sure_archive_dir(dst_dir):
+            MessageBox(0, u'Could not create archive folder "{dir_name}".'.format(dir_name=dst_dir), None, MB_ICONERROR)
             continue
-        #MessageBox(0, "from: %s\r\nto: %s" % (a, new), "order", MB_ICONINFORMATION)
-        os.rename(a, new)
+        os.rename(a, dst_path)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
